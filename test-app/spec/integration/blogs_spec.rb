@@ -1,7 +1,7 @@
 require 'swagger_helper'
 
 RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
-  let(:api_key) { 'fake_key' }
+  let(:blog) { Blog.create(title: 'foo', content: 'bar', thumbnail: 'thumbnail.png') }
 
   before do
     # allow(Rswag::Specs.deprecator).to receive(:warn) # Silence deprecation output from specs
@@ -16,7 +16,7 @@ RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
       produces 'application/json'
       parameter name: :blog, in: :body, schema: { '$ref' => '#/components/schemas/blog' }
 
-      let(:blog) { { title: 'foo', content: 'bar', status: 'published' } }
+      let(:request_params) { { "blog" => { title: 'foo', content: 'bar' } } }
 
       response '201', 'blog created' do
         # schema '$ref' => '#/definitions/blog'
@@ -26,7 +26,7 @@ RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
       response "422", "invalid request" do
         schema "$ref" => "#/components/schemas/errors_object"
 
-        let(:blog) { {title: "foo"} }
+        let(:request_params) { { "blog" => { title: 'foo' } } }
 
         run_test!
 
@@ -49,8 +49,10 @@ RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
         Blog.create(title: 'foo', content: 'hello world', status: 'published')
       end
 
-      let(:keywords) { 'foo bar' }
-      let(:blog_status) { 'published' }
+      let(:request_params) { {
+        "keywords" => 'foo bar',
+        'blog_status' => 'published'
+      } }
 
       response '200', 'success' do
         schema type: 'array', items: { '$ref' => '#/components/schemas/blog' }
@@ -71,7 +73,7 @@ RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
       end
 
       response '406', 'unsupported accept header' do
-        let(:'Accept') { 'application/foo' }
+        let(:request_headers) { { 'Accept' => 'application/foo' } }
         run_test!
       end
     end
@@ -85,14 +87,14 @@ RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
       consumes 'application/json'
       produces 'application/json'
 
-      parameter name: :flexible_blog, in: :body, schema: {
+      parameter name: "flexible_blog", in: :body, schema: {
         oneOf: [
           { '$ref' => '#/definitions/blog' },
           { '$ref' => '#/definitions/flexible_blog' }
         ]
       }
 
-      let(:flexible_blog) { { blog: { headline: 'my headline', text: 'my text' } } }
+      let(:request_params) { { "flexible_blog" => { blog: { headline: 'my headline', text: 'my text' } } } }
 
       response '201', 'flexible blog created' do
         schema oneOf: [{ '$ref' => '#/components/schemas/blog' }, { '$ref' => '#/components/schemas/flexible_blog' }]
@@ -102,10 +104,11 @@ RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
   end
 
   path '/blogs/{id}' do
-    parameter name: :id, in: :path, type: :string
+    parameter name: 'id', in: :path, type: :string
 
-    let(:id) { blog.id }
-    let(:blog) { Blog.create(title: 'foo', content: 'bar', thumbnail: 'thumbnail.png') }
+    let(:request_params) { {
+      "id" => blog.id
+    } }
 
     get 'Retrieves a blog' do
       tags 'Blogs'
@@ -142,7 +145,7 @@ RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
           thumbnail: 'thumbnail.png'
         }
 
-        let(:id) { blog.id }
+        let(:request_params) { { 'id' => blog.id } }
 
         run_test!
 
@@ -152,7 +155,7 @@ RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
       end
 
       response '404', 'blog not found' do
-        let(:id) { 'invalid' }
+        let(:request_params) { { "id" => 'invalid' } }
         run_test!
       end
 
@@ -167,10 +170,14 @@ RSpec.describe 'Blogs API', type: :request, openapi_spec: 'v1/swagger.json' do
   end
 
   path '/blogs/{id}/upload' do
-    parameter name: :id, in: :path, type: :string
+    parameter name: "id", in: :path, type: :string
 
-    let(:id) { blog.id }
     let(:blog) { Blog.create(title: 'foo', content: 'bar') }
+    let(:request_params) { {
+      "id" => blog.id,
+      "blog" => blog,
+      "file" => file
+    } }
 
     put 'Uploads a blog thumbnail' do
       tags 'Blogs'
