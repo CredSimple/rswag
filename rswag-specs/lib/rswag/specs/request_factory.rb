@@ -7,11 +7,16 @@ require 'json'
 module Rswag
   module Specs
     class RequestFactory
-      def initialize(config = ::Rswag::Specs.config)
+      attr_accessor :example, :metadata, :params, :headers
+      def initialize(metadata, example, config = ::Rswag::Specs.config)
         @config = config
+        @example = example
+        @metadata = metadata
+        @params = example.respond_to?(:request_params) ? example.request_params : {}
+        @headers = example.respond_to?(:request_headers) ? example.request_headers : {}
       end
 
-      def build_request(metadata, example)
+      def build_request
         swagger_doc = @config.get_openapi_spec(metadata[:openapi_spec] || metadata[:swagger_doc])
         parameters = expand_parameters(metadata, swagger_doc, example)
 
@@ -34,7 +39,7 @@ module Rswag
         (operation_params + path_item_params + security_params)
           .map { |p| p['$ref'] ? resolve_parameter(p['$ref'], swagger_doc) : p }
           .uniq { |p| p[:name] }
-          .reject { |p| p[:required] == false && !example.respond_to?(extract_getter(p)) }
+          .reject { |p| p[:required] == false && !headers.key?(p[:name]) }
       end
 
       def derive_security_params(metadata, swagger_doc)
@@ -126,16 +131,12 @@ module Rswag
 
         request[:path] = template.tap do |path_template|
           parameters.select { |p| p[:in] == :path }.each do |p|
-            unless example.respond_to?(extract_getter(p))
-              raise ArgumentError.new("`#{p[:name].to_s}` parameter key present, but not defined within example group"\
-                "(i. e `it` or `let` block)")
-            end
-            path_template.gsub!("{#{p[:name]}}", example.send(extract_getter(p)).to_s)
+            path_template.gsub!("{#{p[:name]}}", params.fetch(p[:name]).to_s)
           end
 
           parameters.select { |p| p[:in] == :query }.each_with_index do |p, i|
             path_template.concat(i.zero? ? '?' : '&')
-            path_template.concat(build_query_string_part(p, example.send(extract_getter(p)), swagger_doc))
+            path_template.concat(build_query_string_part(p, params.fetch(p[:name]), swagger_doc))
           end
         end
       end
@@ -174,7 +175,7 @@ module Rswag
               return "#{escaped_name}=" + value.to_a.flatten.map{|v| CGI.escape(v.to_s) }.join(separator)
             end
           else
-            return "#{escaped_name}=#{CGI.escape(value.to_s)}"
+            return "#{name}=#{value}"
           end
         end
 
@@ -198,19 +199,19 @@ module Rswag
       def add_headers(request, metadata, swagger_doc, parameters, example)
         tuples = parameters
           .select { |p| p[:in] == :header }
-          .map { |p| [p[:name], example.send(extract_getter(p)).to_s] }
+          .map { |p| [p[:name], headers.fetch(p[:name]).to_s] }
 
         # Accept header
         produces = metadata[:operation][:produces] || swagger_doc[:produces]
         if produces
-          accept = example.respond_to?(:Accept) ? example.send(:Accept) : produces.first
+          accept = headers.fetch("Accept", produces.first)
           tuples << ['Accept', accept]
         end
 
         # Content-Type header
         consumes = metadata[:operation][:consumes] || swagger_doc[:consumes]
         if consumes
-          content_type = example.respond_to?(:'Content-Type') ? example.send(:'Content-Type') : consumes.first
+          content_type = headers.fetch('Content-Type', consumes.first)
           tuples << ['Content-Type', content_type]
         end
 
@@ -242,65 +243,34 @@ module Rswag
         content_type = request[:headers]['CONTENT_TYPE']
         return if content_type.nil?
 
-        request[:payload] = if ['application/x-www-form-urlencoded', 'multipart/form-data'].include?(content_type)
-                              build_form_payload(parameters, example)
-                            elsif content_type =~ /\Aapplication\/([0-9A-Za-z._-]+\+json\z|json\z)/
-                              build_json_payload(parameters, example)
-                            else
-                              build_raw_payload(parameters, example)
-                            end
+        if ['application/x-www-form-urlencoded', 'multipart/form-data'].include?(content_type)
+          request[:payload] = build_form_payload(parameters)
+        else
+          request[:payload] = build_json_payload(parameters)
+        end
       end
 
-      def build_form_payload(parameters, example)
+      def build_form_payload(parameters)
         # See http://seejohncode.com/2012/04/29/quick-tip-testing-multipart-uploads-with-rspec/
         # Rather that serializing with the appropriate encoding (e.g. multipart/form-data),
         # Rails test infrastructure allows us to send the values directly as a hash
         # PROS: simple to implement, CONS: serialization/deserialization is bypassed in test
         tuples = parameters
           .select { |p| p[:in] == :formData }
-          .map { |p| [p[:name], example.send(extract_getter(p))] }
+          .map { |p| [p[:name], params.fetch(p[:name])] }
         Hash[tuples]
       end
 
-      def build_raw_payload(parameters, example)
+      def build_json_payload(parameters)
         body_param = parameters.select { |p| p[:in] == :body }.first
-        return nil unless body_param
-
-        raise(MissingParameterError, body_param[:name]) unless example.respond_to?(body_param[:name])
-
-        example.send(body_param[:name])
-      end
-
-      def build_json_payload(parameters, example)
-        build_raw_payload(parameters, example)&.to_json
+        body_param ? params.fetch(body_param[:name]).to_json : nil
       end
 
       def doc_version(doc)
         doc[:openapi] || doc[:swagger] || '3'
       end
 
-      def extract_getter(parameter)
-         parameter[:getter] || parameter[:name]
-      end
     end
-
-    class MissingParameterError < StandardError
-      attr_reader :body_param
-
-      def initialize(body_param)
-        @body_param = body_param
-      end
-
-      def message
-        <<~MSG
-          Missing parameter '#{body_param}'
-
-          Please check your spec. It looks like you defined a body parameter,
-          but did not declare usage via let. Try adding:
-
-              let(:#{body_param}) {}
-        MSG
-      end
     end
   end
 end
