@@ -51,6 +51,7 @@ module Rswag
       def stop(_notification = nil)
         @config.swagger_docs.each do |url_path, doc|
           unless doc_version(doc).start_with?('2')
+            doc[:paths] = doc[:paths].sort.to_h
             doc[:paths]&.each_pair do |_k, v|
               v.each_pair do |_verb, value|
                 is_hash = value.is_a?(Hash)
