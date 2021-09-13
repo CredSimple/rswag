@@ -128,6 +128,14 @@ module Rswag
         else # OpenAPI 3
           template = base_path_from_servers(swagger_doc) + metadata[:path_item][:template]
         end
+        # The match here will find the first relative url defined in `servers`
+        # url = if swagger_doc[:servers]
+        #   swagger_doc[:servers].detect{|s| s[:url].match(/^\//) }[:url]
+        # else
+        #   ""
+        # end
+        #
+        # template = url + metadata[:path_item][:template]
 
         request[:path] = template.tap do |path_template|
           parameters.select { |p| p[:in] == :path }.each do |p|

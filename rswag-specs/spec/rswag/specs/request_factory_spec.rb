@@ -13,7 +13,13 @@ module Rswag
         allow(config).to receive(:get_openapi_spec).and_return(openapi_spec)
       end
       let(:config) { double('config') }
-      let(:openapi_spec) { { swagger: '2.0' } }
+      let(:openapi_spec) { {
+        swagger: '2.0',
+        servers: [
+          { url: '/v9' },
+          { url: 'https://example.com/v9' },
+        ],
+      } }
       MockExample = Struct.new(:request_headers, :request_params)
       let(:example) { MockExample.new({}, {}) }
       let(:metadata) do
@@ -28,7 +34,7 @@ module Rswag
 
         it 'builds request hash for given example' do
           expect(request[:verb]).to eq(:get)
-          expect(request[:path]).to eq('/blogs')
+          expect(request[:path]).to eq('/v9/blogs')
         end
 
         context "'path' parameters" do
@@ -73,6 +79,10 @@ module Rswag
               end
             end
           end
+
+          it 'builds the path from example values' do
+            expect(request[:path]).to eq('/v9/blogs/1/comments/2')
+          end
         end
 
         context "'query' parameters" do
@@ -89,7 +99,7 @@ module Rswag
           end
 
           it 'builds the query string from example values' do
-            expect(request[:path]).to eq('/blogs?q1=foo&q2=bar&falsey=false')
+            expect(request[:path]).to eq('/v9/blogs?q1=foo&q2=bar&falsey=false')
           end
 
           context 'when `getter is defined`' do
@@ -344,7 +354,7 @@ module Rswag
           end
 
           it 'builds request hash without them' do
-            expect(request[:path]).to eq('/blogs')
+            expect(request[:path]).to eq('/v9/blogs')
             expect(request[:headers]).to eq({})
           end
         end
@@ -515,7 +525,7 @@ module Rswag
 
             it 'adds name and example value to the query string' do
               example.request_params["api_key"] = 'foobar'
-              expect(request[:path]).to eq('/blogs?api_key=foobar')
+              expect(request[:path]).to eq('/v9/blogs?api_key=foobar')
             end
           end
 
@@ -571,7 +581,7 @@ module Rswag
 
           it 'sets both params to example values' do
             expect(request[:headers]).to eq('HTTP_AUTHORIZATION' => 'Basic foobar')
-            expect(request[:path]).to eq('/blogs?api_key=foobar')
+            expect(request[:path]).to eq('/v9/blogs?api_key=foobar')
           end
         end
 
@@ -584,7 +594,7 @@ module Rswag
           end
 
           it 'populates operation and path level parameters' do
-            expect(request[:path]).to eq('/blogs?q1=foo&q2=bar')
+            expect(request[:path]).to eq('/v9/blogs?q1=foo&q2=bar')
           end
         end
 
@@ -597,7 +607,7 @@ module Rswag
             end
 
             it 'uses the referenced metadata to build the request' do
-              expect(request[:path]).to eq('/blogs?q1=foo')
+              expect(request[:path]).to eq('/v9/blogs?q1=foo')
             end
           end
 
