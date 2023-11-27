@@ -84,6 +84,11 @@ module Rswag
       private
 
       def pretty_generate(doc)
+        doc[:paths] = doc[:paths].sort.to_h if doc[:paths]
+        doc[:components].each do |k1, v1|
+          doc[:components][k1] = v1.map{|k2,v2| [k2.to_s, v2] }.sort.to_h
+        end if doc[:components]
+
         if @config.openapi_format == :yaml
           clean_doc = yaml_prepare(doc)
           YAML.dump(clean_doc)
