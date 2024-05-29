@@ -279,6 +279,5 @@ module Rswag
       end
 
     end
-    end
   end
 end
