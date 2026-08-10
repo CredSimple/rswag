@@ -101,6 +101,10 @@ module Rswag
       private
 
       def pretty_generate(doc)
+        doc[:paths] = doc[:paths].sort.to_h
+        doc[:components].each do |k, v|
+          doc[:components][k] = v.stringify_keys!.sort.to_h
+        end
         if @config.openapi_format == :yaml
           clean_doc = yaml_prepare(doc)
           YAML.dump(clean_doc)
